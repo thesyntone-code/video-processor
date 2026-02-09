@@ -20,9 +20,7 @@ jobs:
       - name: Install High-Performance Tools & AI Sync
         run: |
           sudo apt-get update --fix-missing
-          # تثبيت الأدوات الأصلية + حزمة الخطوط العربية + python للمزامنة
           sudo apt-get install -y ffmpeg fonts-liberation fonts-noto-core parallel bc jq python3-pip
-          # تثبيت أداة المزامنة الصوتية الذكية
           pip install ffsubsync
 
       - name: Download & Prepare Subtitles
@@ -37,62 +35,51 @@ jobs:
           
           curl -L "$SUB_URL" -o "original_sub.$EXT"
           
-          echo "جاري المزامنة التلقائية مع الموجات الصوتية (AI Sync)..."
-          # تم إصلاح الأمر هنا بحذف المعامل المتعارض وتبسيط الصيغة
+          echo "جاري المزامنة التلقائية (AI Sync)..."
+          # المزامنة
           ffs input_video -i "original_sub.$EXT" -o "synced_sub.srt" || cp "original_sub.$EXT" "synced_sub.srt"
           
-          echo "SUB_NAME=synced_sub.srt" >> $GITHUB_ENV
+          # --- التعديل الجوهري هنا ---
+          # نستخدم $(pwd) للحصول على المسار الكامل للملف لتجنب خطأ Unable to open
+          echo "SUB_NAME=$(pwd)/synced_sub.srt" >> $GITHUB_ENV
 
       - name: Parallel Processing (4-Way Optimization - Netflix Style)
         run: |
-          # 1. حساب مدة الفيديو بدقة
           DURATION=$(ffprobe -v error -select_streams v:0 -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 input_video)
           if [ -z "$DURATION" ] || [ "$DURATION" = "N/A" ]; then
             DURATION=$(ffmpeg -i input_video 2>&1 | grep "Duration" | cut -d ' ' -f 4 | sed s/,// | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')
           fi
           echo "إجمالي المدة: $DURATION ثانية"
 
-          # 2. تقسيم الفيديو لـ 4 أجزاء
           PART_DURATION=$(echo "$DURATION / 4" | bc -l)
           
-          # 3. توليد نقاط البداية
           > starts.txt
           for i in {0..3}; do
             echo "$PART_DURATION * $i" | bc >> starts.txt
           done
 
-          # 4. المعالجة المتوازية (ستايل نيتفلكس: خط Bold، لا إطار، ظل خفيف)
           mkdir chunks
+          
+          # ملاحظة: تم استخدام env.SUB_NAME الذي يحتوي الآن على المسار الكامل
           cat starts.txt | parallel -j 4 --ungroup "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video \
-          -filter_complex \"subtitles=${{ env.SUB_NAME }}:force_style='Fontname=Noto Sans Arabic Bold,FontSize=20,PrimaryColour=&H00FFFFFF,Outline=0,Shadow=1,Alignment=2,MarginV=30', \
+          -filter_complex \"subtitles='${{ env.SUB_NAME }}':force_style='Fontname=Noto Sans Arabic Bold,FontSize=20,PrimaryColour=&H00FFFFFF,Outline=0,Shadow=1,Alignment=2,MarginV=30', \
           drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30\" \
           -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
 
       - name: Atomic Merge
         run: |
-          # دمج الأجزاء لحظياً دون إعادة ترميز
           ls chunks/part*.mp4 | sort -V | xargs -I {} echo "file '{}'" > list.txt
           ffmpeg -f concat -safe 0 -i list.txt -c copy output.mp4
 
       - name: Final FTP Upload
         run: |
-          echo "بدء الرفع المباشر إلى السيرفر..."
-          
+          echo "بدء الرفع المباشر..."
           FTP_USER="dsafdsafdsa"
           FTP_PASS="ti9buex2ai"
           FTP_HOST="ftp.byse.sx"
-          
-          FILE_NAME="video_processed_${{ github.run_id }}.mp4"
-
+          FILE_NAME="Netflix_Synced_${{ github.run_id }}.mp4"
           curl -v -T "output.mp4" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$FILE_NAME"
-          
-          echo "------------------------------------------------"
-          echo "✅ المهمة تمت بنجاح باهر مع ستايل نيتفلكس ومزامنة AI!"
-          echo "📁 الملف متاح الآن في سيرفرك باسم: $FILE_NAME"
-          echo "------------------------------------------------"
 
       - name: Cleanup
         if: always()
-        run: |
-          echo "تنظيف الملفات المؤقتة..."
-          rm -rf chunks input_video output.mp4 sub.* original_sub.* synced_sub.srt starts.txt list.txt
+        run: rm -rf chunks input_video output.mp4 sub.* original_sub.* synced_sub.srt starts.txt list.txt
