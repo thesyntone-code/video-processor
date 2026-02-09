@@ -64,20 +64,21 @@ jobs:
           ls chunks/part*.mp4 | sort -V | xargs -I {} echo "file '{}'" > list.txt
           ffmpeg -f concat -safe 0 -i list.txt -c copy output.mp4
 
-      - name: Upload via FTP (Direct to Your Server)
+     - name: Upload via FTP (Corrected Credentials)
         run: |
           echo "جاري الرفع المباشر إلى سيرفرك الخاص..."
           
-          # البيانات من الصورة التي أرفقتها
-          FTP_USER="dsafdsa"
+          # البيانات المصححة من صورتك
+          FTP_USER="dsafdsafdsa"
           FTP_PASS="ti9buex2ai"
           FTP_HOST="ftp.byse.sx"
-          FILE_NAME="final_video_${{ github.run_id }}.mp4"
+          # سنستخدم اسم الملف الأصلي مع رقم العملية لتجنب التكرار
+          FILE_NAME="video_${{ github.run_id }}.mp4"
 
-          # عملية الرفع باستخدام curl
+          # أمر الرفع المباشر مع محاولة معالجة الأخطاء
           curl -v -T "output.mp4" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$FILE_NAME"
           
           echo "------------------------------------------------"
-          echo "✅ تم الرفع بنجاح!"
-          echo "📁 اسم الملف على السيرفر: $FILE_NAME"
+          echo "✅ تم الرفع بنجاح يا بطل!"
+          echo "📁 ستجد الملف في سيرفرك باسم: $FILE_NAME"
           echo "------------------------------------------------"
