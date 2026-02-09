@@ -1,4 +1,4 @@
-name: Video Process 8-CORE NUCLEAR
+name: Video Process UNIVERSAL NUCLEAR - FTP STABLE
 
 on:
   workflow_dispatch:
@@ -35,7 +35,7 @@ jobs:
           curl -L "$SUB_URL" -o "sub.$EXT"
           echo "SUB_NAME=sub.$EXT" >> $GITHUB_ENV
 
-      - name: Parallel Nuclear Processing (8 Parts)
+      - name: Parallel Nuclear Processing (4 Parts - Sweet Spot)
         run: |
           # 1. حساب المدة
           DURATION=$(ffprobe -v error -select_streams v:0 -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 input_video)
@@ -43,47 +43,41 @@ jobs:
             DURATION=$(ffmpeg -i input_video 2>&1 | grep "Duration" | cut -d ' ' -f 4 | sed s/,// | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')
           fi
           
-          echo "مدة الفيديو: $DURATION ثانية"
+          echo "مدة الفيديو الإجمالية: $DURATION ثانية"
 
-          # 2. تقسيم المدة على 8 أجزاء
-          PART_DURATION=$(echo "$DURATION / 8" | bc -l)
+          # 2. تقسيم المدة على 4 أجزاء (أفضل أداء للنواتين)
+          PART_DURATION=$(echo "$DURATION / 4" | bc -l)
           
-          # 3. إنشاء 8 نقاط بداية
+          # 3. إنشاء 4 نقاط بداية
           > starts.txt
-          for i in {0..7}; do
+          for i in {0..3}; do
             echo "$PART_DURATION * $i" | bc >> starts.txt
           done
 
-          # 4. الإطلاق بـ 8 مسارات متزامنة
+          # 4. الإطلاق بـ 4 مسارات متزامنة
           mkdir chunks
-          cat starts.txt | parallel -j 8 --ungroup "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video -filter_complex \"drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30,subtitles=${{ env.SUB_NAME }}\" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
+          cat starts.txt | parallel -j 4 --ungroup "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video -filter_complex \"drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30,subtitles=${{ env.SUB_NAME }}\" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
 
       - name: Atomic Merge
         run: |
-          # دمج 8 أجزاء
+          # دمج الأجزاء الأربعة
           ls chunks/part*.mp4 | sort -V | xargs -I {} echo "file '{}'" > list.txt
           ffmpeg -f concat -safe 0 -i list.txt -c copy output.mp4
 
-      - name: Upload Result
+      - name: Upload via FTP (Direct to Your Server)
         run: |
-          echo "جاري الرفع النهائي..."
-          # محاولة الرفع على file.io مع طباعة النتيجة كاملة للتأكد
-          RESPONSE=$(curl -s -F "file=@output.mp4" https://file.io)
-          echo "Server Response: $RESPONSE"
+          echo "جاري الرفع المباشر إلى سيرفرك الخاص..."
           
-          URL=$(echo $RESPONSE | jq -r '.link')
+          # البيانات من الصورة التي أرفقتها
+          FTP_USER="dsafdsa"
+          FTP_PASS="ti9buex2ai"
+          FTP_HOST="ftp.byse.sx"
+          FILE_NAME="final_video_${{ github.run_id }}.mp4"
+
+          # عملية الرفع باستخدام curl
+          curl -v -T "output.mp4" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$FILE_NAME"
           
-          if [ "$URL" != "null" ] && [ -n "$URL" ]; then
-            echo "------------------------------------------------"
-            echo "✅ تم بنجاح! الرابط الأساسي:"
-            echo "🔗 $URL"
-            echo "------------------------------------------------"
-          else
-            echo "⚠️ فشل الرفع على file.io، جاري الرفع على سيرفر بديل..."
-            # سيرفر بديل (يدعم حتى 20 جيجا وبدون حذف فوري)
-            ALT_URL=$(curl -s --upload-file output.mp4 https://bashupload.com/output.mp4)
-            echo "------------------------------------------------"
-            echo "✅ تم الرفع على السيرفر البديل:"
-            echo "🔗 $ALT_URL"
-            echo "------------------------------------------------"
-          fi
+          echo "------------------------------------------------"
+          echo "✅ تم الرفع بنجاح!"
+          echo "📁 اسم الملف على السيرفر: $FILE_NAME"
+          echo "------------------------------------------------"
