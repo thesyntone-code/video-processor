@@ -20,52 +20,68 @@ jobs:
       - name: Install High-Performance Tools
         run: |
           sudo apt-get update --fix-missing
-          # تم تصحيح اسم الحزمة من gnu-parallel إلى parallel
-          sudo apt-get install -y ffmpeg fonts-liberation fonts-noto-core parallel bc
+          # تثبيت الأدوات والخطوط العربية واللاتينية العريضة
+          sudo apt-get install -y ffmpeg fonts-liberation fonts-noto-core parallel bc jq
 
       - name: Download & Prepare Subtitles
         run: |
-          # تحميل الفيديو
+          # 1. تحميل الفيديو بأقصى سرعة
+          echo "جاري تحميل الفيديو..."
           curl -L "${{ github.event.inputs.video_url }}" -o input_video
           
-          # خدعة الذكاء الاصطناعي لتحديد صيغة الترجمة تلقائياً
+          # 2. تحديد صيغة الترجمة تلقائياً وحفظها بالامتداد الصحيح
           SUB_URL="${{ github.event.inputs.sub_url }}"
           if [[ "$SUB_URL" == *".ass"* ]]; then EXT="ass";
           elif [[ "$SUB_URL" == *".vtt"* ]]; then EXT="vtt";
           else EXT="srt"; fi
           
+          echo "تم تحديد صيغة الترجمة: $EXT"
           curl -L "$SUB_URL" -o "sub.$EXT"
           echo "SUB_NAME=sub.$EXT" >> $GITHUB_ENV
 
       - name: Parallel Nuclear Processing
         run: |
-          # 1. حساب المدة الإجمالية للفيديو
-          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 input_video)
+          # 1. حساب المدة الإجمالية (طريقة سريعة جداً)
+          DURATION=$(ffprobe -v error -select_streams v:0 -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 input_video)
           
-          # 2. تقسيم المدة على 4 أجزاء
+          # حل احتياطي إذا فشل ffprobe في قراءة الـ Header
+          if [ -z "$DURATION" ] || [ "$DURATION" = "N/A" ]; then
+            DURATION=$(ffmpeg -i input_video 2>&1 | grep "Duration" | cut -d ' ' -f 4 | sed s/,// | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')
+          fi
+          
+          echo "مدة الفيديو الإجمالية: $DURATION ثانية"
+
+          # 2. تقسيم المدة على 4 أجزاء متوازية
           PART_DURATION=$(echo "$DURATION / 4" | bc -l)
           
-          # 3. إنشاء ملف المواعيد (البداية لكل جزء)
+          # 3. إنشاء نقاط البداية لكل جزء
           echo "0" > starts.txt
           echo "$PART_DURATION" >> starts.txt
           echo "$PART_DURATION * 2" | bc >> starts.txt
           echo "$PART_DURATION * 3" | bc >> starts.txt
 
-          # 4. التنفيذ النووي (المعدل للتوافق)
+          # 4. التنفيذ النووي الصاروخي (4 محركات تعمل معاً)
           mkdir chunks
-          # {#} تعطي رقم العملية الحالي، و {1} تعطي القيمة من الملف
-          cat starts.txt | parallel -j 4 "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video -filter_complex \"drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30,subtitles=${{ env.SUB_NAME }}:force_style='Alignment=2'\" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
-          
+          cat starts.txt | parallel -j 4 "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video -filter_complex \"drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30,subtitles=${{ env.SUB_NAME }}\" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
+
       - name: Atomic Merge
         run: |
-          # دمج الأجزاء الأربعة فوراً
-          for f in chunks/part*.mp4; do echo "file '$f'" >> list.txt; done
+          # دمج الأجزاء الأربعة لحظياً بدون إعادة معالجة
+          ls chunks/part*.mp4 | sort -V | xargs -I {} echo "file '{}'" > list.txt
           ffmpeg -f concat -safe 0 -i list.txt -c copy output.mp4
 
       - name: Upload Result
         run: |
           echo "جاري الرفع النهائي..."
-          URL=$(curl -F "file=@output.mp4" https://file.io | jq -r '.link')
+          # رفع الفيديو والحصول على الرابط
+          UPLOAD_RESPONSE=$(curl -F "file=@output.mp4" https://file.io)
+          URL=$(echo $UPLOAD_RESPONSE | jq -r '.link')
+          
           echo "------------------------------------------------"
-          echo "رابط التحميل النووي (صالح لمرة واحدة): $URL"
+          if [ "$URL" != "null" ]; then
+            echo "✅ اكتملت العملية بنجاح!"
+            echo "🔗 رابط التحميل النووي: $URL"
+          else
+            echo "❌ فشل الرفع. استجابة السيرفر: $UPLOAD_RESPONSE"
+          fi
           echo "------------------------------------------------"
