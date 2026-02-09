@@ -39,21 +39,23 @@ jobs:
 
       - name: Parallel Nuclear Processing
         run: |
-          # 1. حساب المدة الإجمالية للفيديو بالثواني
+          # 1. حساب المدة الإجمالية للفيديو
           DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 input_video)
+          
+          # 2. تقسيم المدة على 4 أجزاء
           PART_DURATION=$(echo "$DURATION / 4" | bc -l)
           
-          # 2. إنشاء قائمة بالمواعيد (بداية كل ربع)
+          # 3. إنشاء ملف المواعيد (البداية لكل جزء)
           echo "0" > starts.txt
           echo "$PART_DURATION" >> starts.txt
           echo "$PART_DURATION * 2" | bc >> starts.txt
           echo "$PART_DURATION * 3" | bc >> starts.txt
 
-          # 3. التشغيل النووي المتوازي (4 عمليات في نفس اللحظة)
-          # نستخدم -ss قبل -i للسرعة القصوى في الوصول للنقطة الزمنية
+          # 4. التنفيذ النووي (المعدل للتوافق)
           mkdir chunks
-          cat starts.txt | parallel -j 4 --index "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video -filter_complex \"drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30,subtitles=${{ env.SUB_NAME }}\" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
-
+          # {#} تعطي رقم العملية الحالي، و {1} تعطي القيمة من الملف
+          cat starts.txt | parallel -j 4 "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video -filter_complex \"drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30,subtitles=${{ env.SUB_NAME }}:force_style='Alignment=2'\" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
+          
       - name: Atomic Merge
         run: |
           # دمج الأجزاء الأربعة فوراً
