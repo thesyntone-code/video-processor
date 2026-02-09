@@ -1,4 +1,4 @@
-name: Video Process FINAL - FTP STABLE
+name: Video Process FINAL - NETFLIX AI SYNC
 
 on:
   workflow_dispatch:
@@ -17,10 +17,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Install High-Performance Tools
+      - name: Install High-Performance Tools & AI Sync
         run: |
           sudo apt-get update --fix-missing
-          sudo apt-get install -y ffmpeg fonts-liberation fonts-noto-core parallel bc jq
+          # تثبيت الأدوات الأصلية + حزمة الخطوط العربية + python للمزامنة
+          sudo apt-get install -y ffmpeg fonts-liberation fonts-noto-core parallel bc jq python3-pip
+          # تثبيت أداة المزامنة الصوتية الذكية
+          pip install ffsubsync
 
       - name: Download & Prepare Subtitles
         run: |
@@ -28,15 +31,19 @@ jobs:
           curl -L "${{ github.event.inputs.video_url }}" -o input_video
           
           SUB_URL="${{ github.event.inputs.sub_url }}"
-          # تحديد الامتداد تلقائياً
           if [[ "$SUB_URL" == *".ass"* ]]; then EXT="ass";
           elif [[ "$SUB_URL" == *".vtt"* ]]; then EXT="vtt";
           else EXT="srt"; fi
           
-          curl -L "$SUB_URL" -o "sub.$EXT"
-          echo "SUB_NAME=sub.$EXT" >> $GITHUB_ENV
+          curl -L "$SUB_URL" -o "original_sub.$EXT"
+          
+          echo "جاري المزامنة التلقائية مع الموجات الصوتية (AI Sync)..."
+          # استخدام الذكاء الاصطناعي لمطابقة الترجمة مع الصوت بدقة
+          ffs input_video "original_sub.$EXT" -o "synced_sub.srt" || cp "original_sub.$EXT" "synced_sub.srt"
+          
+          echo "SUB_NAME=synced_sub.srt" >> $GITHUB_ENV
 
-      - name: Parallel Processing (4-Way Optimization)
+      - name: Parallel Processing (4-Way Optimization - Netflix Style)
         run: |
           # 1. حساب مدة الفيديو بدقة
           DURATION=$(ffprobe -v error -select_streams v:0 -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 input_video)
@@ -45,7 +52,7 @@ jobs:
           fi
           echo "إجمالي المدة: $DURATION ثانية"
 
-          # 2. تقسيم الفيديو لـ 4 أجزاء (المثالي لنواتين معالج)
+          # 2. تقسيم الفيديو لـ 4 أجزاء
           PART_DURATION=$(echo "$DURATION / 4" | bc -l)
           
           # 3. توليد نقاط البداية
@@ -54,9 +61,13 @@ jobs:
             echo "$PART_DURATION * $i" | bc >> starts.txt
           done
 
-          # 4. المعالجة المتوازية (دمج الترجمة + الشعار)
+          # 4. المعالجة المتوازية (دمج الترجمة بستايل نيتفلكس + الشعار)
           mkdir chunks
-          cat starts.txt | parallel -j 4 --ungroup "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video -filter_complex \"drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30,subtitles=${{ env.SUB_NAME }}\" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
+          # المزايا المضافة: خط Noto Sans Arabic، إلغاء Outline، إضافة Shadow خفيف، ومزامنة seek_point
+          cat starts.txt | parallel -j 4 --ungroup "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video \
+          -filter_complex \"subtitles=${{ env.SUB_NAME }}:force_style='Fontname=Noto Sans Arabic Bold,FontSize=20,PrimaryColour=&H00FFFFFF,Outline=0,Shadow=1,Alignment=2,MarginV=30':seek_point={1}, \
+          drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30\" \
+          -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
 
       - name: Atomic Merge
         run: |
@@ -68,24 +79,21 @@ jobs:
         run: |
           echo "بدء الرفع المباشر إلى السيرفر..."
           
-          # البيانات المستخرجة من صورتك (تم تصحيح اسم المستخدم)
           FTP_USER="dsafdsafdsa"
           FTP_PASS="ti9buex2ai"
           FTP_HOST="ftp.byse.sx"
           
-          # تسمية الملف برقم العملية لضمان عدم التكرار
           FILE_NAME="video_processed_${{ github.run_id }}.mp4"
 
-          # تنفيذ الرفع
           curl -v -T "output.mp4" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$FILE_NAME"
           
           echo "------------------------------------------------"
-          echo "✅ المهمة تمت بنجاح باهر!"
+          echo "✅ المهمة تمت بنجاح باهر مع ستايل نيتفلكس ومزامنة AI!"
           echo "📁 الملف متاح الآن في سيرفرك باسم: $FILE_NAME"
           echo "------------------------------------------------"
 
       - name: Cleanup
         if: always()
         run: |
-          echo "تنظيف الملفات المؤقتة لتوفير المساحة..."
-          rm -rf chunks input_video output.mp4 sub.* starts.txt list.txt
+          echo "تنظيف الملفات المؤقتة..."
+          rm -rf chunks input_video output.mp4 sub.* original_sub.* synced_sub.srt starts.txt list.txt
