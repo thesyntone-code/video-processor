@@ -36,34 +36,46 @@ jobs:
           curl -L "$SUB_URL" -o "original_sub.$EXT"
           
           echo "جاري المزامنة التلقائية (AI Sync)..."
-          # إنتاج الملف
+          # نستخدم اسم بسيط جداً في المجلد الحالي
           ffs input_video -i "original_sub.$EXT" -o "s.srt" || cp "original_sub.$EXT" "s.srt"
           
-          # --- الخطوة السحرية ---
-          # ننسخ الملف إلى المسار المؤقت للهرب من مشاكل المسارات المعقدة
-          cp s.srt /tmp/subs.srt
-          echo "تم نسخ ملف الترجمة إلى /tmp/subs.srt لضمان الوصول إليه"
+          # التحقق النهائي من وجود الملف
+          ls -lh s.srt
 
-      - name: Parallel Processing (4-Way Optimization - Netflix Style)
+      - name: Create Processing Script (The Fix)
+        run: |
+          # نكتب أمر المعالجة داخل ملف منفصل لتجنب مشاكل علامات التنصيص
+          cat << 'EOF' > process.sh
+          #!/bin/bash
+          START=$1
+          DUR=$2
+          INDEX=$3
+          
+          # هنا الأمر نظيف ومباشر بدون تعقيدات parallel
+          ffmpeg -hwaccel auto -ss "$START" -t "$DUR" -i input_video \
+          -filter_complex "subtitles=s.srt:force_style='Fontname=Noto Sans Arabic Bold,FontSize=20,PrimaryColour=&H00FFFFFF,Outline=0,Shadow=1,Alignment=2,MarginV=30', \
+          drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30" \
+          -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k "chunks/part${INDEX}.mp4"
+          EOF
+          
+          # نعطي الصلاحية للسكربت
+          chmod +x process.sh
+
+      - name: Parallel Processing (Script Execution)
         run: |
           DURATION=$(ffprobe -v error -select_streams v:0 -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 input_video)
           PART_DURATION=$(echo "$DURATION / 4" | bc -l)
+          
+          mkdir chunks
           
           > starts.txt
           for i in {0..3}; do
             echo "$PART_DURATION * $i" | bc >> starts.txt
           done
-
-          mkdir chunks
           
-          # التعديل هنا:
-          # 1. استخدام --workdir . لضمان ثبات المسار
-          # 2. استخدام /tmp/subs.srt كمسار ملف الترجمة (آمن 100% من الأخطاء)
-          
-          cat starts.txt | parallel -j 4 --workdir . --ungroup "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video \
-          -filter_complex \"subtitles='/tmp/subs.srt':force_style='Fontname=Noto Sans Arabic Bold,FontSize=20,PrimaryColour=&H00FFFFFF,Outline=0,Shadow=1,Alignment=2,MarginV=30', \
-          drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30\" \
-          -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
+          # الآن parallel يستدعي السكربت فقط، ويمرر له (وقت البداية) و (مدة الجزء) و (رقم الجزء)
+          # {1} = start time, {#} = job number (index)
+          cat starts.txt | parallel -j 4 --ungroup "./process.sh {1} $PART_DURATION {#}"
 
       - name: Atomic Merge
         run: |
@@ -75,9 +87,9 @@ jobs:
           FTP_USER="dsafdsafdsa"
           FTP_PASS="ti9buex2ai"
           FTP_HOST="ftp.byse.sx"
-          FILE_NAME="Success_Synced_${{ github.run_id }}.mp4"
+          FILE_NAME="Netflix_Done_${{ github.run_id }}.mp4"
           curl -v -T "output.mp4" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$FILE_NAME"
 
       - name: Cleanup
         if: always()
-        run: rm -rf chunks input_video output.mp4 s.srt original_sub.* starts.txt list.txt
+        run: rm -rf chunks input_video output.mp4 s.srt original_sub.* starts.txt list.txt process.sh
