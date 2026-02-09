@@ -38,8 +38,8 @@ jobs:
           curl -L "$SUB_URL" -o "original_sub.$EXT"
           
           echo "جاري المزامنة التلقائية مع الموجات الصوتية (AI Sync)..."
-          # تصحيح الأمر: استخدام -i لتعريف الفيديو والترجمة بوضوح لتجنب خطأ unrecognized arguments
-          ffs input_video -i "original_sub.$EXT" -o "synced_sub.srt" --overwrite-input || cp "original_sub.$EXT" "synced_sub.srt"
+          # تم إصلاح الأمر هنا بحذف المعامل المتعارض وتبسيط الصيغة
+          ffs input_video -i "original_sub.$EXT" -o "synced_sub.srt" || cp "original_sub.$EXT" "synced_sub.srt"
           
           echo "SUB_NAME=synced_sub.srt" >> $GITHUB_ENV
 
