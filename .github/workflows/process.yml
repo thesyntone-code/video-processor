@@ -36,11 +36,13 @@ jobs:
           curl -L "$SUB_URL" -o "original_sub.$EXT"
           
           echo "جاري المزامنة التلقائية (AI Sync)..."
-          # سنخرج الملف باسم قصير جداً ومباشر في المجلد الحالي
+          # إنتاج الملف
           ffs input_video -i "original_sub.$EXT" -o "s.srt" || cp "original_sub.$EXT" "s.srt"
           
-          # التأكد من وجود الملف فعلياً
-          ls -lh s.srt
+          # --- الخطوة السحرية ---
+          # ننسخ الملف إلى المسار المؤقت للهرب من مشاكل المسارات المعقدة
+          cp s.srt /tmp/subs.srt
+          echo "تم نسخ ملف الترجمة إلى /tmp/subs.srt لضمان الوصول إليه"
 
       - name: Parallel Processing (4-Way Optimization - Netflix Style)
         run: |
@@ -53,9 +55,13 @@ jobs:
           done
 
           mkdir chunks
-          # التعديل هنا: نستخدم اسم الملف المباشر s.srt مع حمايته بـ ' '
-          cat starts.txt | parallel -j 4 --ungroup "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video \
-          -filter_complex \"subtitles=s.srt:force_style='Fontname=Noto Sans Arabic Bold,FontSize=20,PrimaryColour=&H00FFFFFF,Outline=0,Shadow=1,Alignment=2,MarginV=30', \
+          
+          # التعديل هنا:
+          # 1. استخدام --workdir . لضمان ثبات المسار
+          # 2. استخدام /tmp/subs.srt كمسار ملف الترجمة (آمن 100% من الأخطاء)
+          
+          cat starts.txt | parallel -j 4 --workdir . --ungroup "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video \
+          -filter_complex \"subtitles='/tmp/subs.srt':force_style='Fontname=Noto Sans Arabic Bold,FontSize=20,PrimaryColour=&H00FFFFFF,Outline=0,Shadow=1,Alignment=2,MarginV=30', \
           drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30\" \
           -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
 
@@ -69,7 +75,7 @@ jobs:
           FTP_USER="dsafdsafdsa"
           FTP_PASS="ti9buex2ai"
           FTP_HOST="ftp.byse.sx"
-          FILE_NAME="Final_Fixed_${{ github.run_id }}.mp4"
+          FILE_NAME="Success_Synced_${{ github.run_id }}.mp4"
           curl -v -T "output.mp4" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$FILE_NAME"
 
       - name: Cleanup
