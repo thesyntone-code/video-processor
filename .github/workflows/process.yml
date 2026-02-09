@@ -19,8 +19,9 @@ jobs:
 
       - name: Install High-Performance Tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-liberation fonts-noto-core gnu-parallel bc
+          sudo apt-get update --fix-missing
+          # تم تصحيح اسم الحزمة من gnu-parallel إلى parallel
+          sudo apt-get install -y ffmpeg fonts-liberation fonts-noto-core parallel bc
 
       - name: Download & Prepare Subtitles
         run: |
