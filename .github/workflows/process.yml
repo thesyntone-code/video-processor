@@ -1,13 +1,13 @@
-name: Video Process Professional
+name: Video Process UNIVERSAL NUCLEAR
 
 on:
   workflow_dispatch:
     inputs:
       video_url:
-        description: 'رابط الفيديو المباشر (Direct Video Link)'
+        description: 'رابط الفيديو المباشر'
         required: true
       sub_url:
-        description: 'رابط ملف الترجمة (Direct Subtitle Link)'
+        description: 'رابط ملف الترجمة (أي صيغة)'
         required: true
 
 jobs:
@@ -17,32 +17,52 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Install Tools & Arabic Fonts
+      - name: Install High-Performance Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-liberation fonts-noto-core fonts-noto-ui-core fonts-noto-extra
+          sudo apt-get install -y ffmpeg fonts-liberation fonts-noto-core gnu-parallel bc
 
-      - name: Download Files
+      - name: Download & Prepare Subtitles
         run: |
-          # تحميل الفيديو والترجمة (الاسم ثابت للسهولة)
+          # تحميل الفيديو
           curl -L "${{ github.event.inputs.video_url }}" -o input_video
-          curl -L "${{ github.event.inputs.sub_url }}" -o sub.ass
+          
+          # خدعة الذكاء الاصطناعي لتحديد صيغة الترجمة تلقائياً
+          SUB_URL="${{ github.event.inputs.sub_url }}"
+          if [[ "$SUB_URL" == *".ass"* ]]; then EXT="ass";
+          elif [[ "$SUB_URL" == *".vtt"* ]]; then EXT="vtt";
+          else EXT="srt"; fi
+          
+          curl -L "$SUB_URL" -o "sub.$EXT"
+          echo "SUB_NAME=sub.$EXT" >> $GITHUB_ENV
 
-      - name: Process Video
+      - name: Parallel Nuclear Processing
         run: |
-          # شرح الفلتر المستخدم:
-          # drawtext: يكتب كلمة FarGa بخط عريض (bold) ولون أبيض شفاف (0.5) في الإحداثيات 20:20
-          # subtitles: يقوم بدمج ملف الترجمة وحرقها داخل الصورة
-          ffmpeg -i input_video -filter_complex \
-          "drawtext=text='FarGa':fontcolor=white@0.5:fontsize=36:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=20:y=20,subtitles=sub.ass" \
-          -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k output.mp4
+          # 1. حساب المدة الإجمالية للفيديو بالثواني
+          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 input_video)
+          PART_DURATION=$(echo "$DURATION / 4" | bc -l)
+          
+          # 2. إنشاء قائمة بالمواعيد (بداية كل ربع)
+          echo "0" > starts.txt
+          echo "$PART_DURATION" >> starts.txt
+          echo "$PART_DURATION * 2" | bc >> starts.txt
+          echo "$PART_DURATION * 3" | bc >> starts.txt
+
+          # 3. التشغيل النووي المتوازي (4 عمليات في نفس اللحظة)
+          # نستخدم -ss قبل -i للسرعة القصوى في الوصول للنقطة الزمنية
+          mkdir chunks
+          cat starts.txt | parallel -j 4 --index "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video -filter_complex \"drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30,subtitles=${{ env.SUB_NAME }}\" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
+
+      - name: Atomic Merge
+        run: |
+          # دمج الأجزاء الأربعة فوراً
+          for f in chunks/part*.mp4; do echo "file '$f'" >> list.txt; done
+          ffmpeg -f concat -safe 0 -i list.txt -c copy output.mp4
 
       - name: Upload Result
         run: |
-          echo "جاري رفع الفيديو... يرجى الانتظار"
-          # رفع الملف والحصول على رابط التحميل
-          RESPONSE=$(curl -F "file=@output.mp4" https://file.io)
+          echo "جاري الرفع النهائي..."
+          URL=$(curl -F "file=@output.mp4" https://file.io | jq -r '.link')
           echo "------------------------------------------------"
-          echo "رابط التحميل الخاص بك هو:"
-          echo $RESPONSE | jq -r '.link'
+          echo "رابط التحميل النووي (صالح لمرة واحدة): $URL"
           echo "------------------------------------------------"
