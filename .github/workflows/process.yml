@@ -84,8 +84,8 @@ jobs:
 
       - name: Final FTP Upload
         run: |
-          FTP_USER="dsafdsafdsa"
-          FTP_PASS="ti9buex2ai"
+          FTP_USER="ArStream2"
+          FTP_PASS="qq0jmwa3ov"
           FTP_HOST="ftp.byse.sx"
           FILE_NAME="Netflix_Done_${{ github.run_id }}.mp4"
           curl -v -T "output.mp4" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$FILE_NAME"
