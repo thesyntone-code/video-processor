@@ -1,0 +1,48 @@
+name: Video Process Professional
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: 'رابط الفيديو المباشر (Direct Video Link)'
+        required: true
+      sub_url:
+        description: 'رابط ملف الترجمة (Direct Subtitle Link)'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Tools & Arabic Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-liberation fonts-noto-core fonts-noto-ui-core fonts-noto-extra
+
+      - name: Download Files
+        run: |
+          # تحميل الفيديو والترجمة (الاسم ثابت للسهولة)
+          curl -L "${{ github.event.inputs.video_url }}" -o input_video
+          curl -L "${{ github.event.inputs.sub_url }}" -o sub.ass
+
+      - name: Process Video
+        run: |
+          # شرح الفلتر المستخدم:
+          # drawtext: يكتب كلمة FarGa بخط عريض (bold) ولون أبيض شفاف (0.5) في الإحداثيات 20:20
+          # subtitles: يقوم بدمج ملف الترجمة وحرقها داخل الصورة
+          ffmpeg -i input_video -filter_complex \
+          "drawtext=text='FarGa':fontcolor=white@0.5:fontsize=36:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=20:y=20,subtitles=sub.ass" \
+          -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k output.mp4
+
+      - name: Upload Result
+        run: |
+          echo "جاري رفع الفيديو... يرجى الانتظار"
+          # رفع الملف والحصول على رابط التحميل
+          RESPONSE=$(curl -F "file=@output.mp4" https://file.io)
+          echo "------------------------------------------------"
+          echo "رابط التحميل الخاص بك هو:"
+          echo $RESPONSE | jq -r '.link'
+          echo "------------------------------------------------"
