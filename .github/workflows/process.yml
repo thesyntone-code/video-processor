@@ -61,11 +61,10 @@ jobs:
             echo "$PART_DURATION * $i" | bc >> starts.txt
           done
 
-          # 4. المعالجة المتوازية (دمج الترجمة بستايل نيتفلكس + الشعار)
+          # 4. المعالجة المتوازية (تم إزالة seek_point المسببة للخطأ)
           mkdir chunks
-          # المزايا المضافة: خط Noto Sans Arabic، إلغاء Outline، إضافة Shadow خفيف، ومزامنة seek_point
           cat starts.txt | parallel -j 4 --ungroup "ffmpeg -hwaccel auto -ss {1} -t $PART_DURATION -i input_video \
-          -filter_complex \"subtitles=${{ env.SUB_NAME }}:force_style='Fontname=Noto Sans Arabic Bold,FontSize=20,PrimaryColour=&H00FFFFFF,Outline=0,Shadow=1,Alignment=2,MarginV=30':seek_point={1}, \
+          -filter_complex \"subtitles=${{ env.SUB_NAME }}:force_style='Fontname=Noto Sans Arabic Bold,FontSize=20,PrimaryColour=&H00FFFFFF,Outline=0,Shadow=1,Alignment=2,MarginV=30', \
           drawtext=text='FarGa':fontcolor=white@0.5:fontsize=40:fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:x=30:y=30\" \
           -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k chunks/part{#}.mp4"
 
